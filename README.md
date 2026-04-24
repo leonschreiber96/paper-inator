@@ -1,1 +1,1 @@
-# paper-inator
+# Paper-inator
