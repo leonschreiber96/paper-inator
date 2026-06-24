@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>paper-inator</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <header>
+    <h1>paper-inator</h1>
+    <p class="tagline">Academic publication aggregator</p>
+  </header>
+
+  <main>
+    <section id="feeds-section">
+      <h2>Feeds</h2>
+      <form id="add-feed-form" autocomplete="off">
+        <input type="text" id="feed-name" placeholder="Feed name" required>
+        <input type="url" id="feed-url" placeholder="https://example.org/rss" required>
+        <button type="submit">Add feed</button>
+      </form>
+      <p id="feed-error" class="error" hidden></p>
+      <ul id="feed-list" class="list"></ul>
+    </section>
+
+    <section id="publications-section">
+      <h2>Publications</h2>
+      <div class="filters">
+        <select id="filter-feed">
+          <option value="">All feeds</option>
+        </select>
+        <input type="search" id="filter-q" placeholder="Search title or author">
+        <select id="filter-sort">
+          <option value="published_at">Newest published</option>
+          <option value="fetched_at">Recently fetched</option>
+          <option value="title">Title</option>
+        </select>
+      </div>
+      <ul id="publication-list" class="list"></ul>
+    </section>
+  </main>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
