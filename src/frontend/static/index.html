@@ -8,12 +8,24 @@
 </head>
 <body>
   <header>
-    <h1>paper-inator</h1>
-    <p class="tagline">Academic publication aggregator</p>
+    <div class="header-top">
+      <div>
+        <h1>paper-inator</h1>
+        <p class="tagline">Academic publication aggregator</p>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab-btn" data-hash="#feeds" role="tab">Feeds</button>
+      <button class="tab-btn" data-hash="#publications" role="tab">Publications</button>
+      <button class="tab-btn" data-hash="#summaries" role="tab">Summaries</button>
+      <button class="tab-btn" data-hash="#settings" role="tab">Settings</button>
+    </nav>
   </header>
 
   <main>
-    <section id="feeds-section">
+
+    <!-- ── Feeds ─────────────────────────────────────────────────── -->
+    <section id="feeds-section" data-hash="#feeds">
       <h2>Feeds</h2>
       <form id="add-feed-form" autocomplete="off">
         <input type="text" id="feed-name" placeholder="Feed name" required>
@@ -24,7 +36,8 @@
       <ul id="feed-list" class="list"></ul>
     </section>
 
-    <section id="publications-section">
+    <!-- ── Publications ──────────────────────────────────────────── -->
+    <section id="publications-section" data-hash="#publications" class="hidden">
       <h2>Publications</h2>
       <div class="filters">
         <select id="filter-feed">
@@ -38,7 +51,59 @@
         </select>
       </div>
       <ul id="publication-list" class="list"></ul>
+      <div class="pagination" id="load-more-row" hidden>
+        <button id="load-more-btn">Load more</button>
+      </div>
     </section>
+
+    <!-- ── Summaries ─────────────────────────────────────────────── -->
+    <section id="summaries-section" data-hash="#summaries" class="hidden">
+      <h2>Summaries</h2>
+      <details id="summary-form-details">
+        <summary id="summary-form-toggle">+ New summary</summary>
+        <form id="summary-form" autocomplete="off">
+          <input type="hidden" id="summary-id">
+          <div class="form-grid">
+            <label>Name
+              <input type="text" id="summary-name" required>
+            </label>
+            <label>Recipient email
+              <input type="email" id="summary-recipient" required>
+            </label>
+            <label>Max items
+              <input type="number" id="summary-max-items" value="10" min="1" max="100">
+            </label>
+          </div>
+          <fieldset class="feed-checkboxes">
+            <legend>Include feeds</legend>
+            <div id="summary-feed-checks"></div>
+          </fieldset>
+          <label class="inline-check">
+            <input type="checkbox" id="summary-enabled" checked> Enabled
+          </label>
+          <p id="summary-error" class="error" hidden></p>
+          <div class="form-actions">
+            <button type="submit" id="summary-submit">Save</button>
+            <button type="button" id="summary-cancel" class="link">Cancel</button>
+          </div>
+        </form>
+      </details>
+      <ul id="summary-list" class="list"></ul>
+    </section>
+
+    <!-- ── Settings ──────────────────────────────────────────────── -->
+    <section id="settings-section" data-hash="#settings" class="hidden">
+      <h2>Settings</h2>
+      <form id="settings-form" autocomplete="off" class="settings-form">
+        <label>Default fetch interval (minutes, 0 = server default)
+          <input type="number" id="setting-fetch-interval" min="0" placeholder="15">
+        </label>
+        <p id="settings-error" class="error" hidden></p>
+        <p id="settings-success" class="success" hidden>Saved.</p>
+        <button type="submit">Save settings</button>
+      </form>
+    </section>
+
   </main>
 
   <script src="/js/app.js"></script>
