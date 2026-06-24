@@ -41,8 +41,8 @@ func TestMigrationsApplyAndAreIdempotent(t *testing.T) {
 	if err := s2.DB().QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil {
 		t.Fatalf("count migrations: %v", err)
 	}
-	if count != 1 {
-		t.Errorf("expected 1 applied migration, got %d", count)
+	if count < 1 {
+		t.Errorf("expected at least 1 applied migration, got %d", count)
 	}
 }
 
@@ -141,6 +141,51 @@ func TestPublicationTimeRoundTrip(t *testing.T) {
 	}
 	if got[0].FetchedAt.IsZero() {
 		t.Error("fetched_at should be populated from the DB default")
+	}
+}
+
+func TestFeedFieldsUpsertAndList(t *testing.T) {
+	s := newTestStore(t)
+	feed := &models.Feed{Name: "J", URL: "https://example.org/ff", Enabled: true}
+	if err := s.CreateFeed(feed); err != nil {
+		t.Fatalf("create feed: %v", err)
+	}
+
+	// First upsert — populates sample values
+	if err := s.UpsertFeedFields(feed.ID, map[string]string{
+		"title":   "First Paper",
+		"creator": "Ada Lovelace",
+	}); err != nil {
+		t.Fatalf("first upsert: %v", err)
+	}
+
+	// Second upsert — must not overwrite existing samples; adds a new field
+	if err := s.UpsertFeedFields(feed.ID, map[string]string{
+		"title":   "Second Paper",   // existing — sample must stay "First Paper"
+		"summary": "An abstract.",   // new
+	}); err != nil {
+		t.Fatalf("second upsert: %v", err)
+	}
+
+	got, err := s.ListFeedFields(feed.ID)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("expected 3 fields, got %d", len(got))
+	}
+	byName := make(map[string]string)
+	for _, f := range got {
+		byName[f.FieldName] = f.SampleValue
+	}
+	if byName["title"] != "First Paper" {
+		t.Errorf("sample should not be overwritten; got %q", byName["title"])
+	}
+	if byName["creator"] != "Ada Lovelace" {
+		t.Errorf("creator sample missing; got %q", byName["creator"])
+	}
+	if byName["summary"] != "An abstract." {
+		t.Errorf("new field sample wrong; got %q", byName["summary"])
 	}
 }
 

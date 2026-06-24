@@ -58,6 +58,15 @@ type Setting struct {
 	Value string `json:"value"`
 }
 
+// FeedField records a source field name discovered in a feed during ingestion.
+// SampleValue holds the first non-empty value seen, shown in the mapping UI
+// so users can identify fields without knowing the RSS spec.
+type FeedField struct {
+	FeedID      int64  `json:"feed_id"`
+	FieldName   string `json:"field_name"`
+	SampleValue string `json:"sample_value"`
+}
+
 // ValidTargetFields enumerates the Publication fields that a FieldMapping may
 // target. Used by validation and by the mapping layer's defaults.
 var ValidTargetFields = []string{"title", "authors", "abstract", "link", "published_at"}
