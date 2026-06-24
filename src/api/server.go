@@ -45,6 +45,8 @@ func NewServer(s *store.Store, ingester FeedIngester) http.Handler {
 
 	mux.HandleFunc("GET /api/feeds/{id}/mappings", srv.getMappings)
 	mux.HandleFunc("PUT /api/feeds/{id}/mappings", srv.putMappings)
+	mux.HandleFunc("GET /api/feeds/{id}/fields", srv.getFeedFields)
+	mux.HandleFunc("POST /api/feeds/{id}/ingest", srv.triggerIngest)
 
 	mux.HandleFunc("GET /api/publications", srv.listPublications)
 
