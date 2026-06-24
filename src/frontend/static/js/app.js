@@ -393,13 +393,24 @@ async function loadPublications(reset = true) {
   });
   const feedID = el('filter-feed').value;
   const q = el('filter-q').value.trim();
+  const minScore = el('filter-score').value;
   if (feedID) params.set('feed_id', feedID);
   if (q) params.set('q', q);
+  if (minScore) params.set('min_score', minScore);
 
   const pubs = await api.get('/api/publications?' + params.toString());
   pubTotal = pubs.length;
   renderPublications(pubs, reset);
   el('load-more-row').hidden = pubs.length < PAGE_SIZE;
+}
+
+function relevanceBadge(score, notes) {
+  if (score == null) return '';
+  const pct = Math.round(score * 100);
+  const cls = score >= 0.8 ? 'relevance-high' : score >= 0.5 ? 'relevance-med' : 'relevance-low';
+  const label = score >= 0.8 ? 'high' : score >= 0.5 ? 'med' : 'low';
+  const tip = notes ? escapeAttr(notes) : `${pct}% relevant`;
+  return `<span class="relevance-badge ${cls}" title="${tip}">${label} ${pct}%</span>`;
 }
 
 function renderPublications(pubs, reset) {
@@ -415,7 +426,7 @@ function renderPublications(pubs, reset) {
       : escapeHTML(p.title);
     const hasAbstract = p.abstract && p.abstract.trim();
     li.innerHTML =
-      `<div class="pub-title">${titleLink}</div>` +
+      `<div class="pub-title">${titleLink} ${relevanceBadge(p.relevance_score, p.relevance_notes)}</div>` +
       `<div class="pub-meta">${escapeHTML(p.authors || 'Unknown authors')}` +
       (p.published_at ? ` · ${fmtDate(p.published_at)}` : '') +
       (hasAbstract ? ` <button class="pub-abstract-toggle" aria-expanded="false">▸ Abstract</button>` : '') +
@@ -439,7 +450,7 @@ el('load-more-btn').addEventListener('click', async () => {
   await loadPublications(false);
 });
 
-['filter-feed', 'filter-sort'].forEach((id) => el(id).addEventListener('change', () => loadPublications(true)));
+['filter-feed', 'filter-sort', 'filter-score'].forEach((id) => el(id).addEventListener('change', () => loadPublications(true)));
 el('filter-q').addEventListener('input', debounce(() => loadPublications(true), 250));
 
 // ── Summaries ──────────────────────────────────────────────────────────────────
@@ -557,11 +568,29 @@ function resetSummaryForm() {
 // ── Settings ───────────────────────────────────────────────────────────────────
 
 async function loadSettings() {
-  try {
-    const s = await api.get('/api/settings/fetch_interval_minutes').catch(() => null);
-    if (s) el('setting-fetch-interval').value = s.value;
-  } catch (_) { /* setting may not exist yet */ }
+  const getSetting = async (key) => {
+    try { return (await api.get(`/api/settings/${key}`)).value; } catch (_) { return ''; }
+  };
+  const [interval, profile, scorer, llmUrl, llmKey, llmModel] = await Promise.all([
+    getSetting('fetch_interval_minutes'),
+    getSetting('interest_profile'),
+    getSetting('relevance_scorer'),
+    getSetting('llm_base_url'),
+    getSetting('llm_api_key'),
+    getSetting('llm_model'),
+  ]);
+  if (interval) el('setting-fetch-interval').value = interval;
+  el('setting-interest-profile').value = profile;
+  el('setting-relevance-scorer').value = scorer || 'keyword';
+  el('setting-llm-base-url').value = llmUrl;
+  el('setting-llm-api-key').value = llmKey;
+  el('setting-llm-model').value = llmModel;
+  el('llm-settings').hidden = (scorer || 'keyword') !== 'llm';
 }
+
+el('setting-relevance-scorer').addEventListener('change', () => {
+  el('llm-settings').hidden = el('setting-relevance-scorer').value !== 'llm';
+});
 
 el('settings-form').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -573,6 +602,32 @@ el('settings-form').addEventListener('submit', async (e) => {
     });
     el('settings-success').hidden = false;
   } catch (err) { showError('settings-error', err.message); }
+});
+
+el('relevance-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  clearError('relevance-error');
+  el('relevance-success').hidden = true;
+  const scorer = el('setting-relevance-scorer').value;
+  const saves = [
+    api.send('PUT', '/api/settings/interest_profile',   { value: el('setting-interest-profile').value.trim() }),
+    api.send('PUT', '/api/settings/relevance_scorer',   { value: scorer }),
+    api.send('PUT', '/api/settings/llm_base_url',       { value: el('setting-llm-base-url').value.trim() }),
+    api.send('PUT', '/api/settings/llm_api_key',        { value: el('setting-llm-api-key').value.trim() }),
+    api.send('PUT', '/api/settings/llm_model',          { value: el('setting-llm-model').value.trim() }),
+  ];
+  try {
+    await Promise.all(saves);
+    el('relevance-success').hidden = false;
+  } catch (err) { showError('relevance-error', err.message); }
+});
+
+el('reanalyze-btn').addEventListener('click', async () => {
+  if (!confirm('Delete all existing relevance scores and re-analyze every publication? This may take a few minutes.')) return;
+  try {
+    await api.send('POST', '/api/relevance/reanalyze');
+    alert('Re-analysis queued. Scores will update within the next 2 minutes.');
+  } catch (err) { alert(err.message); }
 });
 
 // ── Global actions & init ──────────────────────────────────────────────────────

@@ -47,7 +47,13 @@
         <select id="filter-sort">
           <option value="published_at">Newest published</option>
           <option value="fetched_at">Recently fetched</option>
-          <option value="title">Title</option>
+          <option value="title">Title A–Z</option>
+          <option value="relevance">Most relevant</option>
+        </select>
+        <select id="filter-score">
+          <option value="">Any relevance</option>
+          <option value="0.5">50%+ relevant</option>
+          <option value="0.8">80%+ relevant</option>
         </select>
       </div>
       <ul id="publication-list" class="list"></ul>
@@ -94,6 +100,8 @@
     <!-- ── Settings ──────────────────────────────────────────────── -->
     <section id="settings-section" data-hash="#settings" class="hidden">
       <h2>Settings</h2>
+
+      <h3 class="settings-section-heading">General</h3>
       <form id="settings-form" autocomplete="off" class="settings-form">
         <label>Default fetch interval (minutes, 0 = server default)
           <input type="number" id="setting-fetch-interval" min="0" placeholder="15">
@@ -101,6 +109,37 @@
         <p id="settings-error" class="error" hidden></p>
         <p id="settings-success" class="success" hidden>Saved.</p>
         <button type="submit">Save settings</button>
+      </form>
+
+      <h3 class="settings-section-heading">Relevance scoring</h3>
+      <p class="settings-hint">Describe your research interests in plain language. The enrichment worker scores every publication against this profile and assigns a relevance badge (high / med / low) visible in the publications list.</p>
+      <form id="relevance-form" autocomplete="off" class="settings-form">
+        <label>Interest profile
+          <textarea id="setting-interest-profile" rows="5" placeholder="e.g. I study mechanistic interpretability of large language models, attention head analysis, and sparse autoencoders. Less interested in inference optimization or deployment engineering."></textarea>
+        </label>
+        <label>Scoring method
+          <select id="setting-relevance-scorer">
+            <option value="keyword">Keyword matching (offline, no API key needed)</option>
+            <option value="llm">LLM (semantic, OpenAI-compatible endpoint)</option>
+          </select>
+        </label>
+        <div id="llm-settings" hidden>
+          <label>API base URL
+            <input type="url" id="setting-llm-base-url" placeholder="https://api.openai.com/v1">
+          </label>
+          <label>API key
+            <input type="password" id="setting-llm-api-key" placeholder="sk-…">
+          </label>
+          <label>Model name
+            <input type="text" id="setting-llm-model" placeholder="gpt-4o-mini">
+          </label>
+        </div>
+        <p id="relevance-error" class="error" hidden></p>
+        <p id="relevance-success" class="success" hidden>Saved.</p>
+        <div class="form-actions">
+          <button type="submit">Save relevance settings</button>
+          <button type="button" id="reanalyze-btn" class="secondary">Re-analyze publications</button>
+        </div>
       </form>
     </section>
 
