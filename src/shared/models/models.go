@@ -28,16 +28,18 @@ type FieldMapping struct {
 
 // Publication is a normalized, deduplicated academic publication.
 type Publication struct {
-	ID          int64      `json:"id"`
-	FeedID      int64      `json:"feed_id"`
-	Title       string     `json:"title"`
-	Authors     string     `json:"authors"`
-	Abstract    string     `json:"abstract"`
-	Link        string     `json:"link"`
-	PublishedAt *time.Time `json:"published_at,omitempty"`
-	FetchedAt   time.Time  `json:"fetched_at"`
-	DedupKey    string     `json:"dedup_key"`
-	Raw         string     `json:"raw,omitempty"` // original item as JSON, for debugging/remapping
+	ID             int64      `json:"id"`
+	FeedID         int64      `json:"feed_id"`
+	Title          string     `json:"title"`
+	Authors        string     `json:"authors"`
+	Abstract       string     `json:"abstract"`
+	Link           string     `json:"link"`
+	PublishedAt    *time.Time `json:"published_at,omitempty"`
+	FetchedAt      time.Time  `json:"fetched_at"`
+	DedupKey       string     `json:"dedup_key"`
+	Raw            string     `json:"raw,omitempty"`      // original item as JSON, for debugging/remapping
+	RelevanceScore *float64   `json:"relevance_score,omitempty"` // nil = not yet scored
+	RelevanceNotes string     `json:"relevance_notes,omitempty"` // scorer's explanation
 }
 
 // Summary is a user-configured email digest of new publications.

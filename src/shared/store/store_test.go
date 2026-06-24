@@ -189,6 +189,84 @@ func TestFeedFieldsUpsertAndList(t *testing.T) {
 	}
 }
 
+func TestPublicationScoreUpsertAndQuery(t *testing.T) {
+	s := newTestStore(t)
+	feed := &models.Feed{Name: "J", URL: "https://example.org/sc", Enabled: true}
+	if err := s.CreateFeed(feed); err != nil {
+		t.Fatalf("create feed: %v", err)
+	}
+	pub := &models.Publication{FeedID: feed.ID, Title: "Attention Is All You Need", Authors: "Vaswani et al.", DedupKey: "k-attn"}
+	if _, err := s.InsertPublication(pub); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	// Before scoring: publication appears in unscored list
+	unscored, err := s.ListUnscoredPublications(10)
+	if err != nil {
+		t.Fatalf("list unscored: %v", err)
+	}
+	if len(unscored) != 1 || unscored[0].ID != pub.ID {
+		t.Errorf("expected 1 unscored pub, got %d", len(unscored))
+	}
+
+	// Score the publication
+	if err := s.UpsertPublicationScore(pub.ID, 0.9, "Matches: transformer, attention", "keyword"); err != nil {
+		t.Fatalf("upsert score: %v", err)
+	}
+
+	// After scoring: no longer appears in unscored list
+	unscored, err = s.ListUnscoredPublications(10)
+	if err != nil {
+		t.Fatalf("list unscored after score: %v", err)
+	}
+	if len(unscored) != 0 {
+		t.Errorf("expected 0 unscored pubs after scoring, got %d", len(unscored))
+	}
+
+	// Score appears in ListPublications
+	pubs, err := s.ListPublications(PublicationFilter{})
+	if err != nil {
+		t.Fatalf("list publications: %v", err)
+	}
+	if len(pubs) != 1 {
+		t.Fatalf("expected 1 pub, got %d", len(pubs))
+	}
+	if pubs[0].RelevanceScore == nil || *pubs[0].RelevanceScore != 0.9 {
+		t.Errorf("expected score 0.9, got %v", pubs[0].RelevanceScore)
+	}
+	if pubs[0].RelevanceNotes != "Matches: transformer, attention" {
+		t.Errorf("notes mismatch: %q", pubs[0].RelevanceNotes)
+	}
+
+	// MinScore filter excludes low-scoring publications
+	minScore := 0.95
+	filtered, err := s.ListPublications(PublicationFilter{MinScore: &minScore})
+	if err != nil {
+		t.Fatalf("list with min_score: %v", err)
+	}
+	if len(filtered) != 0 {
+		t.Errorf("expected 0 pubs above 0.95, got %d", len(filtered))
+	}
+
+	// Overwrite score
+	if err := s.UpsertPublicationScore(pub.ID, 0.5, "Updated notes", "llm"); err != nil {
+		t.Fatalf("overwrite score: %v", err)
+	}
+	pubs, _ = s.ListPublications(PublicationFilter{})
+	if pubs[0].RelevanceScore == nil || *pubs[0].RelevanceScore != 0.5 {
+		t.Errorf("expected overwritten score 0.5, got %v", pubs[0].RelevanceScore)
+	}
+
+	// DeleteAllScores resets everything
+	if err := s.DeleteAllScores(); err != nil {
+		t.Fatalf("delete scores: %v", err)
+	}
+	pubs, _ = s.ListPublications(PublicationFilter{})
+	if pubs[0].RelevanceScore != nil {
+		t.Errorf("expected nil score after DeleteAllScores, got %v", pubs[0].RelevanceScore)
+	}
+}
+
 func TestSettingsRoundTrip(t *testing.T) {
 	s := newTestStore(t)
 	if _, err := s.GetSetting("theme"); err != ErrNotFound {
