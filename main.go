@@ -37,6 +37,10 @@ func main() {
 	worker := serviceWorker.New(st, cfg.FetchInterval)
 	go worker.Run(ctx)
 
+	// Background relevance enrichment worker.
+	enricher := serviceWorker.NewEnricher(st)
+	go enricher.Run(ctx)
+
 	// HTTP server (API + embedded frontend).
 	server := &http.Server{
 		Addr:              cfg.Addr,
