@@ -1,0 +1,90 @@
+:root {
+  --bg: #f7f8fa;
+  --panel: #ffffff;
+  --border: #e2e5ea;
+  --text: #1d2330;
+  --muted: #6b7280;
+  --accent: #2563eb;
+  --danger: #dc2626;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+header {
+  padding: 1.5rem 2rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+header h1 { margin: 0; font-size: 1.5rem; }
+.tagline { margin: 0.25rem 0 0; color: var(--muted); }
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem;
+  display: grid;
+  gap: 2rem;
+}
+
+section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+}
+
+h2 { margin-top: 0; font-size: 1.2rem; }
+
+form, .filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+input, select, button {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  background: #fff;
+}
+
+input[type="text"], input[type="url"], input[type="search"] { flex: 1 1 12rem; }
+
+button {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  cursor: pointer;
+}
+button:hover { filter: brightness(1.05); }
+button.link { background: none; border: none; color: var(--danger); padding: 0; }
+
+.list { list-style: none; margin: 0; padding: 0; }
+
+.list li {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.list li:last-child { border-bottom: none; }
+
+.pub-title { font-weight: 600; }
+.pub-title a { color: var(--text); text-decoration: none; }
+.pub-title a:hover { color: var(--accent); }
+.pub-meta { color: var(--muted); font-size: 0.85rem; }
+
+.feed-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.feed-meta { color: var(--muted); font-size: 0.85rem; }
+
+.error { color: var(--danger); margin: 0 0 0.75rem; }
+.empty { color: var(--muted); font-style: italic; }
