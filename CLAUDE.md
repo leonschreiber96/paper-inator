@@ -1,9 +1,11 @@
 # Project overview
-This project aggregates academic publications from RSS feeds into a unified local database that can be browsed, filtered, queried, and forwarded via email summaries.
+This project aggregates academic publications from RSS feeds into a unified local database that can be browsed, filtered, and automatically ranked by relevance to the user's personal research interests.
+
+**The central feature is relevance scoring**: every ingested publication is analyzed against the user's interest profile and assigned a score (0–1). Two interchangeable scorers are supported — a pure-Go keyword scorer (offline, no deps) and an LLM scorer (any OpenAI-compatible endpoint, semantic understanding). This is what makes paper-inator useful rather than just being another RSS reader.
 
 It has three main parts:
-- `/src/serviceWorker`: pulls/parses feeds, maps fields, deduplicates publications, stores data, generates email summaries
-- `/src/frontend`: pure HTML/CSS/JS web UI for managing feeds, mappings, publications, and summaries
+- `/src/serviceWorker`: pulls/parses feeds, maps fields, deduplicates publications, scores relevance, stores data, generates email summaries
+- `/src/frontend`: pure HTML/CSS/JS web UI for managing feeds, mappings, publications, relevance settings, and summaries
 - `/src/api`: REST API for external clients and for frontend/backend configuration
 
 Primary goal: easy self-hosted deployment for non-expert scientists. The preferred deployment model is a single executable behind nginx with SQLite as the only required database.
@@ -68,5 +70,7 @@ A task is not done unless:
 ## Product-specific rules
 - Publications may come from heterogeneous RSS formats; field mapping must stay configurable per feed.
 - Deduplication should be deterministic and explainable, based primarily on title and authors unless otherwise specified.
+- Relevance scoring is the core value-add: every publication must eventually receive a score. Scoring failures must be silent and retriable — never block ingestion. Unscored publications are shown without a badge and re-queued automatically.
+- The keyword scorer and LLM scorer must be interchangeable via a single settings toggle. The scorer interface must remain stable so new scorer types can be added without touching the enrichment worker.
 - Email summaries must remain user-configurable by feed selection and item count.
 - The system should remain understandable and operable for non-programming users.

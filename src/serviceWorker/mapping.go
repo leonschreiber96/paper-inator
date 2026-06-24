@@ -83,3 +83,62 @@ func rawJSON(it Item) string {
 	}
 	return string(b)
 }
+
+// CollectDiscoveredFields returns every source field name visible to the mapping
+// layer across all parsed items, paired with the first non-empty sample value
+// seen. Standard Item struct fields are represented by their canonical names
+// ("title", "authors", "summary", "link", "published_at"); non-standard
+// elements come from each item's Extra map.
+func CollectDiscoveredFields(items []Item) map[string]string {
+	out := make(map[string]string)
+	set := func(name, value string) {
+		if value != "" {
+			if _, exists := out[name]; !exists {
+				out[name] = value
+			}
+		}
+	}
+	for _, it := range items {
+		set("title", it.Title)
+		set("authors", it.Authors)
+		set("summary", it.Summary)
+		set("link", it.Link)
+		if it.Published != nil {
+			set("published_at", it.Published.Format("2006-01-02"))
+		}
+		for k, v := range it.Extra {
+			set(k, v)
+		}
+	}
+	return out
+}
+
+// autoAssignRules lists the source field names to try, in priority order, for
+// each internal target field. The first discovered source wins.
+var autoAssignRules = []struct {
+	target  string
+	sources []string
+}{
+	{"title", []string{"title"}},
+	{"authors", []string{"authors", "creator", "author"}},
+	{"abstract", []string{"summary", "abstract", "description", "content"}},
+	{"link", []string{"link"}},
+	{"published_at", []string{"published_at", "date", "pubDate", "published"}},
+}
+
+// AutoAssignMappings produces default FieldMappings from a set of discovered
+// fields. It is a pure function: given the same discovered fields it always
+// returns the same result, so it is safe to call repeatedly and test easily.
+// At most one mapping is created per target (the first matching source wins).
+func AutoAssignMappings(fields map[string]string) []models.FieldMapping {
+	var out []models.FieldMapping
+	for _, rule := range autoAssignRules {
+		for _, src := range rule.sources {
+			if _, ok := fields[src]; ok {
+				out = append(out, models.FieldMapping{SourceField: src, TargetField: rule.target})
+				break
+			}
+		}
+	}
+	return out
+}

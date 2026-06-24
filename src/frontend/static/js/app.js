@@ -44,7 +44,9 @@ const api = {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
-    return res.status === 204 ? null : res.json();
+    if (res.status === 204 || res.status === 202) return null;
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
   },
 };
 
@@ -153,7 +155,9 @@ function buildFeedItem(f) {
   details.className = 'feed-details';
   const summ = document.createElement('summary');
   summ.textContent = 'Edit / Mappings';
-  details.append(summ, buildFeedEditForm(f), buildMappingsEditor(f));
+  const { el: mappingEl, load: loadMapping } = buildMappingsEditor(f);
+  details.append(summ, buildFeedEditForm(f), mappingEl);
+  details.addEventListener('toggle', () => { if (details.open) loadMapping(); }, { once: true });
   li.append(details);
 
   return li;
@@ -193,60 +197,170 @@ function buildFeedEditForm(f) {
   return wrap;
 }
 
-// ── Field Mappings ─────────────────────────────────────────────────────────────
+// ── Field Mappings (drag-and-drop) ────────────────────────────────────────────
 
 const TARGET_FIELDS = ['title', 'authors', 'abstract', 'link', 'published_at'];
+const TARGET_LABELS = { title: 'Title', authors: 'Authors', abstract: 'Abstract', link: 'Link', published_at: 'Published' };
 
+// buildMappingsEditor returns { el, load } where el is the DOM node and load()
+// fetches fields + current mappings and renders the DnD UI. load() is called by
+// buildFeedItem on first open of the <details> panel.
 function buildMappingsEditor(f) {
+  let discoveredFields = []; // [{field_name, sample_value}]
+  let assignments = Object.fromEntries(TARGET_FIELDS.map((t) => [t, null]));
+
   const wrap = document.createElement('div');
   wrap.className = 'mappings-wrap';
-  wrap.innerHTML = `<p class="mappings-hint">Map a raw RSS/Atom field name (source) to an internal field (target). Changes apply to future ingestion.</p>
-    <div class="mapping-rows"></div>
-    <div class="mappings-actions">
-      <button type="button" class="secondary add-mapping">+ Add mapping</button>
-      <button type="button" class="save-mappings">Save mappings</button>
-    </div>`;
+  wrap.innerHTML = `
+    <div class="field-pool-section">
+      <div class="field-pool-label">Feed fields</div>
+      <div class="field-pool"></div>
+    </div>
+    <div class="assignment-grid-section">
+      <div class="field-pool-label">Target assignments</div>
+      <div class="assignment-grid"></div>
+    </div>
+    <div class="mappings-actions"></div>`;
 
-  const rowsEl = wrap.querySelector('.mapping-rows');
+  const poolEl = wrap.querySelector('.field-pool');
 
-  async function loadMappings() {
+  // Pool accepts drops from target zones (returns chip to unassigned pool)
+  poolEl.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; poolEl.classList.add('drag-over'); });
+  poolEl.addEventListener('dragleave', (e) => { if (!poolEl.contains(e.relatedTarget)) poolEl.classList.remove('drag-over'); });
+  poolEl.addEventListener('drop', (e) => {
+    e.preventDefault();
+    poolEl.classList.remove('drag-over');
+    const fromTarget = e.dataTransfer.getData('from-target');
+    if (fromTarget) { assignments[fromTarget] = null; rerender(); }
+  });
+
+  // Actions
+  const actionsEl = wrap.querySelector('.mappings-actions');
+  const refreshBtn = document.createElement('button');
+  refreshBtn.type = 'button';
+  refreshBtn.className = 'secondary';
+  refreshBtn.textContent = '↻ Refresh fields';
+  refreshBtn.onclick = async () => {
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = 'Refreshing…';
     try {
-      const mappings = await api.get(`/api/feeds/${f.id}/mappings`);
-      rowsEl.innerHTML = '';
-      for (const m of mappings) addMappingRow(m.source_field, m.target_field);
+      await api.send('POST', `/api/feeds/${f.id}/ingest`);
+      // Give the async worker time to finish before re-fetching fields
+      await new Promise((r) => setTimeout(r, 2500));
+      await load();
     } catch (err) { alert(err.message); }
-  }
-
-  function addMappingRow(source = '', target = 'title') {
-    const row = document.createElement('div');
-    row.className = 'mapping-row';
-    row.innerHTML = `
-      <input type="text" placeholder="source field (e.g. dc:creator)" value="${escapeAttr(source)}">
-      <select>${TARGET_FIELDS.map((t) => `<option${t === target ? ' selected' : ''}>${t}</option>`).join('')}</select>
-      <button type="button" class="link">Remove</button>`;
-    row.querySelector('.link').onclick = () => row.remove();
-    rowsEl.append(row);
-  }
-
-  wrap.querySelector('.add-mapping').onclick = () => addMappingRow();
-
-  wrap.querySelector('.save-mappings').onclick = async () => {
-    const rows = [...rowsEl.querySelectorAll('.mapping-row')];
-    const mappings = rows
-      .map((r) => ({ source_field: r.querySelector('input').value.trim(), target_field: r.querySelector('select').value }))
-      .filter((m) => m.source_field);
-    try {
-      await api.send('PUT', `/api/feeds/${f.id}/mappings`, mappings);
-      alert('Mappings saved.');
-    } catch (err) { alert(err.message); }
+    finally { refreshBtn.disabled = false; refreshBtn.textContent = '↻ Refresh fields'; }
   };
 
-  // Lazy-load mappings when the parent <details> opens
-  wrap.closest('details') && wrap.closest('details').addEventListener('toggle', (e) => {
-    if (e.target.open && rowsEl.childElementCount === 0) loadMappings();
-  }, { once: true });
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.textContent = 'Save mappings';
+  saveBtn.onclick = async () => {
+    const mappings = TARGET_FIELDS
+      .filter((t) => assignments[t])
+      .map((t) => ({ source_field: assignments[t], target_field: t }));
+    try {
+      await api.send('PUT', `/api/feeds/${f.id}/mappings`, mappings);
+      saveBtn.textContent = '✓ Saved';
+      setTimeout(() => { saveBtn.textContent = 'Save mappings'; }, 1500);
+    } catch (err) { alert(err.message); }
+  };
+  actionsEl.append(refreshBtn, saveBtn);
 
-  return wrap;
+  function makeChip(fieldName, sampleValue, fromTarget) {
+    const chip = document.createElement('div');
+    chip.className = 'field-chip';
+    chip.draggable = true;
+    chip.title = sampleValue ? `${fieldName}\nSample: ${sampleValue}` : fieldName;
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = fieldName;
+    chip.append(nameSpan);
+    if (fromTarget) {
+      const rmBtn = document.createElement('button');
+      rmBtn.type = 'button';
+      rmBtn.className = 'chip-remove';
+      rmBtn.textContent = '×';
+      rmBtn.onclick = (e) => { e.stopPropagation(); assignments[fromTarget] = null; rerender(); };
+      chip.append(rmBtn);
+    }
+    chip.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', fieldName);
+      e.dataTransfer.setData('from-target', fromTarget || '');
+      e.dataTransfer.effectAllowed = 'move';
+      chip.classList.add('dragging');
+    });
+    chip.addEventListener('dragend', () => chip.classList.remove('dragging'));
+    return chip;
+  }
+
+  function makeDropZone(target) {
+    const zone = document.createElement('div');
+    zone.className = 'drop-zone';
+    zone.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', (e) => { if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over'); });
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+      const fieldName = e.dataTransfer.getData('text/plain');
+      const fromTarget = e.dataTransfer.getData('from-target');
+      if (!fieldName) return;
+      if (fromTarget && fromTarget !== target) assignments[fromTarget] = null;
+      assignments[target] = fieldName;
+      rerender();
+    });
+    return zone;
+  }
+
+  function rerender() {
+    const assigned = new Set(Object.values(assignments).filter(Boolean));
+
+    // Pool
+    poolEl.innerHTML = '';
+    const unassigned = discoveredFields.filter((df) => !assigned.has(df.field_name));
+    if (discoveredFields.length === 0) {
+      poolEl.innerHTML = '<span class="empty" style="font-size:0.8rem">No fields discovered yet — click ↻ Refresh fields.</span>';
+    } else {
+      for (const df of unassigned) poolEl.append(makeChip(df.field_name, df.sample_value, null));
+    }
+
+    // Assignment grid
+    const gridEl = wrap.querySelector('.assignment-grid');
+    gridEl.innerHTML = '';
+    for (const target of TARGET_FIELDS) {
+      const row = document.createElement('div');
+      row.className = 'assignment-row';
+      const lbl = document.createElement('div');
+      lbl.className = 'assignment-label';
+      lbl.textContent = TARGET_LABELS[target];
+      const zone = makeDropZone(target);
+      const src = assignments[target];
+      if (src) {
+        const df = discoveredFields.find((d) => d.field_name === src);
+        zone.append(makeChip(src, df?.sample_value ?? '', target));
+        zone.classList.add('has-chip');
+      }
+      row.append(lbl, zone);
+      gridEl.append(row);
+    }
+  }
+
+  async function load() {
+    try {
+      const [fields, mappings] = await Promise.all([
+        api.get(`/api/feeds/${f.id}/fields`),
+        api.get(`/api/feeds/${f.id}/mappings`),
+      ]);
+      discoveredFields = fields;
+      for (const t of TARGET_FIELDS) assignments[t] = null;
+      for (const m of mappings) {
+        if (TARGET_FIELDS.includes(m.target_field)) assignments[m.target_field] = m.source_field;
+      }
+      rerender();
+    } catch (err) { alert(err.message); }
+  }
+
+  rerender(); // empty initial state before load() is called
+  return { el: wrap, load };
 }
 
 // ── Publications ───────────────────────────────────────────────────────────────
@@ -279,13 +393,24 @@ async function loadPublications(reset = true) {
   });
   const feedID = el('filter-feed').value;
   const q = el('filter-q').value.trim();
+  const minScore = el('filter-score').value;
   if (feedID) params.set('feed_id', feedID);
   if (q) params.set('q', q);
+  if (minScore) params.set('min_score', minScore);
 
   const pubs = await api.get('/api/publications?' + params.toString());
   pubTotal = pubs.length;
   renderPublications(pubs, reset);
   el('load-more-row').hidden = pubs.length < PAGE_SIZE;
+}
+
+function relevanceBadge(score, notes) {
+  if (score == null) return '';
+  const pct = Math.round(score * 100);
+  const cls = score >= 0.8 ? 'relevance-high' : score >= 0.5 ? 'relevance-med' : 'relevance-low';
+  const label = score >= 0.8 ? 'high' : score >= 0.5 ? 'med' : 'low';
+  const tip = notes ? escapeAttr(notes) : `${pct}% relevant`;
+  return `<span class="relevance-badge ${cls}" title="${tip}">${label} ${pct}%</span>`;
 }
 
 function renderPublications(pubs, reset) {
@@ -301,7 +426,7 @@ function renderPublications(pubs, reset) {
       : escapeHTML(p.title);
     const hasAbstract = p.abstract && p.abstract.trim();
     li.innerHTML =
-      `<div class="pub-title">${titleLink}</div>` +
+      `<div class="pub-title">${titleLink} ${relevanceBadge(p.relevance_score, p.relevance_notes)}</div>` +
       `<div class="pub-meta">${escapeHTML(p.authors || 'Unknown authors')}` +
       (p.published_at ? ` · ${fmtDate(p.published_at)}` : '') +
       (hasAbstract ? ` <button class="pub-abstract-toggle" aria-expanded="false">▸ Abstract</button>` : '') +
@@ -325,7 +450,7 @@ el('load-more-btn').addEventListener('click', async () => {
   await loadPublications(false);
 });
 
-['filter-feed', 'filter-sort'].forEach((id) => el(id).addEventListener('change', () => loadPublications(true)));
+['filter-feed', 'filter-sort', 'filter-score'].forEach((id) => el(id).addEventListener('change', () => loadPublications(true)));
 el('filter-q').addEventListener('input', debounce(() => loadPublications(true), 250));
 
 // ── Summaries ──────────────────────────────────────────────────────────────────
@@ -443,11 +568,29 @@ function resetSummaryForm() {
 // ── Settings ───────────────────────────────────────────────────────────────────
 
 async function loadSettings() {
-  try {
-    const s = await api.get('/api/settings/fetch_interval_minutes').catch(() => null);
-    if (s) el('setting-fetch-interval').value = s.value;
-  } catch (_) { /* setting may not exist yet */ }
+  const getSetting = async (key) => {
+    try { return (await api.get(`/api/settings/${key}`)).value; } catch (_) { return ''; }
+  };
+  const [interval, profile, scorer, llmUrl, llmKey, llmModel] = await Promise.all([
+    getSetting('fetch_interval_minutes'),
+    getSetting('interest_profile'),
+    getSetting('relevance_scorer'),
+    getSetting('llm_base_url'),
+    getSetting('llm_api_key'),
+    getSetting('llm_model'),
+  ]);
+  if (interval) el('setting-fetch-interval').value = interval;
+  el('setting-interest-profile').value = profile;
+  el('setting-relevance-scorer').value = scorer || 'keyword';
+  el('setting-llm-base-url').value = llmUrl;
+  el('setting-llm-api-key').value = llmKey;
+  el('setting-llm-model').value = llmModel;
+  el('llm-settings').hidden = (scorer || 'keyword') !== 'llm';
 }
+
+el('setting-relevance-scorer').addEventListener('change', () => {
+  el('llm-settings').hidden = el('setting-relevance-scorer').value !== 'llm';
+});
 
 el('settings-form').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -459,6 +602,32 @@ el('settings-form').addEventListener('submit', async (e) => {
     });
     el('settings-success').hidden = false;
   } catch (err) { showError('settings-error', err.message); }
+});
+
+el('relevance-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  clearError('relevance-error');
+  el('relevance-success').hidden = true;
+  const scorer = el('setting-relevance-scorer').value;
+  const saves = [
+    api.send('PUT', '/api/settings/interest_profile',   { value: el('setting-interest-profile').value.trim() }),
+    api.send('PUT', '/api/settings/relevance_scorer',   { value: scorer }),
+    api.send('PUT', '/api/settings/llm_base_url',       { value: el('setting-llm-base-url').value.trim() }),
+    api.send('PUT', '/api/settings/llm_api_key',        { value: el('setting-llm-api-key').value.trim() }),
+    api.send('PUT', '/api/settings/llm_model',          { value: el('setting-llm-model').value.trim() }),
+  ];
+  try {
+    await Promise.all(saves);
+    el('relevance-success').hidden = false;
+  } catch (err) { showError('relevance-error', err.message); }
+});
+
+el('reanalyze-btn').addEventListener('click', async () => {
+  if (!confirm('Delete all existing relevance scores and re-analyze every publication? This may take a few minutes.')) return;
+  try {
+    await api.send('POST', '/api/relevance/reanalyze');
+    alert('Re-analysis queued. Scores will update within the next 2 minutes.');
+  } catch (err) { alert(err.message); }
 });
 
 // ── Global actions & init ──────────────────────────────────────────────────────

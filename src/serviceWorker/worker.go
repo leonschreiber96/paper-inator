@@ -113,7 +113,7 @@ func (w *Worker) interval(f models.Feed) time.Duration {
 	return w.defaultInterval
 }
 
-// ingest runs the full fetch -> parse -> map -> dedup -> store pipeline for one feed.
+// ingest runs the full fetch -> parse -> field-discovery -> map -> dedup -> store pipeline.
 func (w *Worker) ingest(ctx context.Context, f models.Feed) error {
 	data, err := fetch(ctx, f.URL)
 	if err != nil {
@@ -123,9 +123,26 @@ func (w *Worker) ingest(ctx context.Context, f models.Feed) error {
 	if err != nil {
 		return err
 	}
+
+	// Persist every source field the feed exposes so the mapping UI can show them.
+	discovered := CollectDiscoveredFields(items)
+	if err := w.store.UpsertFeedFields(f.ID, discovered); err != nil {
+		log.Printf("worker: save fields for feed %d: %v", f.ID, err)
+	}
+
 	mappings, err := w.store.ListMappings(f.ID)
 	if err != nil {
 		return err
+	}
+	// On first ingest, auto-assign sensible default mappings so the UI shows a
+	// useful starting point without requiring manual configuration.
+	if len(mappings) == 0 && len(discovered) > 0 {
+		auto := AutoAssignMappings(discovered)
+		if err := w.store.ReplaceMappings(f.ID, auto); err != nil {
+			log.Printf("worker: auto-assign mappings for feed %d: %v", f.ID, err)
+		} else {
+			mappings = auto
+		}
 	}
 
 	var added, skipped int

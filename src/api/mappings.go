@@ -23,6 +23,41 @@ func (s *Server) getMappings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, mappings)
 }
 
+// getFeedFields returns the source fields discovered for a feed during the last
+// ingest run. Returns an empty array before the first ingest.
+func (s *Server) getFeedFields(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	if _, err := s.store.GetFeed(id); err != nil {
+		writeError(w, err)
+		return
+	}
+	fields, err := s.store.ListFeedFields(id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, fields)
+}
+
+// triggerIngest starts an immediate ingest of the feed and returns 202 Accepted.
+// The ingest runs asynchronously; the caller should poll /api/feeds/{id}/fields
+// afterwards to see refreshed discovered fields.
+func (s *Server) triggerIngest(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	if _, err := s.store.GetFeed(id); err != nil {
+		writeError(w, err)
+		return
+	}
+	s.ingester.TriggerFeed(id)
+	w.WriteHeader(http.StatusAccepted)
+}
+
 // putMappings replaces the full set of mappings for a feed with the request body.
 func (s *Server) putMappings(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r)

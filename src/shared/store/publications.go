@@ -11,12 +11,13 @@ import (
 
 // PublicationFilter describes optional constraints and paging for ListPublications.
 type PublicationFilter struct {
-	FeedID int64  // 0 means "any feed"
-	Search string // case-insensitive substring match on title/authors; "" means no filter
-	Limit  int    // 0 means default (50)
-	Offset int
-	SortBy string // "published_at" (default) or "fetched_at" or "title"
-	Desc   bool   // sort descending (default true for time fields)
+	FeedID   int64    // 0 means "any feed"
+	Search   string   // case-insensitive substring match on title/authors; "" means no filter
+	Limit    int      // 0 means default (50)
+	Offset   int
+	SortBy   string   // "published_at" (default), "fetched_at", "title", or "relevance"
+	Desc     bool     // sort descending (default true for time fields)
+	MinScore *float64 // if set: only publications with relevance_score >= this value
 }
 
 // InsertPublication stores a publication if its DedupKey is not already present.
@@ -52,21 +53,30 @@ func (s *Store) InsertPublication(p *models.Publication) (bool, error) {
 }
 
 // ListPublications returns publications matching the filter, newest first by default.
+// Each publication is LEFT JOINed with publication_scores so RelevanceScore and
+// RelevanceNotes are populated when a score exists and nil/empty otherwise.
 func (s *Store) ListPublications(f PublicationFilter) ([]models.Publication, error) {
 	var where []string
 	var args []any
 	if f.FeedID > 0 {
-		where = append(where, "feed_id = ?")
+		where = append(where, "p.feed_id = ?")
 		args = append(args, f.FeedID)
 	}
-	if s := strings.TrimSpace(f.Search); s != "" {
-		where = append(where, "(LOWER(title) LIKE ? OR LOWER(authors) LIKE ?)")
-		like := "%" + strings.ToLower(s) + "%"
+	if search := strings.TrimSpace(f.Search); search != "" {
+		where = append(where, "(LOWER(p.title) LIKE ? OR LOWER(p.authors) LIKE ?)")
+		like := "%" + strings.ToLower(search) + "%"
 		args = append(args, like, like)
 	}
+	if f.MinScore != nil {
+		where = append(where, "ps.score >= ?")
+		args = append(args, *f.MinScore)
+	}
 
-	query := `SELECT id, feed_id, title, authors, abstract, link, published_at, fetched_at, dedup_key, raw
-	            FROM publications`
+	query := `SELECT p.id, p.feed_id, p.title, p.authors, p.abstract, p.link,
+	                 p.published_at, p.fetched_at, p.dedup_key, p.raw,
+	                 ps.score, ps.notes
+	            FROM publications p
+	            LEFT JOIN publication_scores ps ON p.id = ps.publication_id`
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -100,27 +110,34 @@ func (s *Store) ListPublications(f PublicationFilter) ([]models.Publication, err
 // orderClause builds a safe ORDER BY from a small allowlist of columns, never
 // from raw user input, to avoid SQL injection.
 func orderClause(f PublicationFilter) string {
-	col := "published_at"
-	switch f.SortBy {
-	case "fetched_at":
-		col = "fetched_at"
-	case "title":
-		col = "title"
-	}
 	dir := "DESC"
 	if !f.Desc {
 		dir = "ASC"
 	}
-	// Tie-break on id for stable ordering.
-	return col + " " + dir + ", id " + dir
+	switch f.SortBy {
+	case "fetched_at":
+		return "p.fetched_at " + dir + ", p.id " + dir
+	case "title":
+		return "p.title " + dir + ", p.id " + dir
+	case "relevance":
+		// Unscored publications (NULL score) go to the bottom regardless of direction.
+		return "ps.score DESC NULLS LAST, p.id DESC"
+	default:
+		return "p.published_at " + dir + ", p.id " + dir
+	}
 }
 
+// scanPublication scans a row from ListPublications (which includes a LEFT JOIN
+// with publication_scores) into a Publication. The score and notes columns are
+// nullable and will be nil/empty when no score exists yet.
 func scanPublication(sc scanner) (*models.Publication, error) {
 	var p models.Publication
 	var published sql.NullString
 	var fetched string
+	var score sql.NullFloat64
+	var notes sql.NullString
 	err := sc.Scan(&p.ID, &p.FeedID, &p.Title, &p.Authors, &p.Abstract, &p.Link,
-		&published, &fetched, &p.DedupKey, &p.Raw)
+		&published, &fetched, &p.DedupKey, &p.Raw, &score, &notes)
 	if err != nil {
 		return nil, err
 	}
@@ -129,6 +146,31 @@ func scanPublication(sc scanner) (*models.Publication, error) {
 	}
 	if p.FetchedAt, err = scanRequiredTime(fetched); err != nil {
 		return nil, err
+	}
+	if score.Valid {
+		p.RelevanceScore = &score.Float64
+		p.RelevanceNotes = notes.String
+	}
+	return &p, nil
+}
+
+// scanPublicationBase scans a row that does NOT include score columns (used by
+// ListUnscoredPublications which queries publications without a JOIN).
+func scanPublicationBase(sc scanner) (*models.Publication, error) {
+	var p models.Publication
+	var published sql.NullString
+	var fetched string
+	err := sc.Scan(&p.ID, &p.FeedID, &p.Title, &p.Authors, &p.Abstract, &p.Link,
+		&published, &fetched, &p.DedupKey, &p.Raw)
+	if err != nil {
+		return nil, err
+	}
+	var parseErr error
+	if p.PublishedAt, parseErr = scanTime(published); parseErr != nil {
+		return nil, parseErr
+	}
+	if p.FetchedAt, parseErr = scanRequiredTime(fetched); parseErr != nil {
+		return nil, parseErr
 	}
 	return &p, nil
 }

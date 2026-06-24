@@ -195,13 +195,25 @@ button.secondary:hover { background: var(--bg); filter: none; }
 .feed-edit-form label input { flex: none; }
 .feed-edit-form .form-actions { grid-column: 1 / -1; display: flex; gap: 0.5rem; }
 
-/* Mappings */
+/* Mappings DnD */
 .mappings-wrap { margin-top: 0.75rem; }
-.mapping-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.4rem; }
-.mapping-row input { flex: 1; }
-.mapping-row select { flex: 1; }
-.mappings-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
-.mappings-hint { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.5rem; }
+.field-pool-label { font-size: 0.75rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.35rem; }
+.field-pool-section { margin-bottom: 0.75rem; }
+.assignment-grid-section { margin-bottom: 0.5rem; }
+.field-pool { display: flex; flex-wrap: wrap; gap: 0.35rem; min-height: 2.25rem; padding: 0.4rem 0.5rem; background: var(--bg); border: 1.5px dashed var(--border); border-radius: 6px; transition: border-color 0.15s, background 0.15s; align-content: flex-start; }
+.field-pool.drag-over { border-color: var(--accent); background: #eff6ff; }
+.field-chip { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.5rem; background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; border-radius: 100px; font-size: 0.78rem; font-weight: 500; cursor: grab; user-select: none; white-space: nowrap; }
+.field-chip:active { cursor: grabbing; }
+.field-chip.dragging { opacity: 0.35; }
+.chip-remove { background: none; border: none; color: #93c5fd; font-size: 1rem; line-height: 1; padding: 0 0 0 0.1rem; cursor: pointer; display: flex; align-items: center; }
+.chip-remove:hover { color: #1d4ed8; filter: none; }
+.assignment-grid { display: flex; flex-direction: column; gap: 0.3rem; }
+.assignment-row { display: flex; align-items: center; gap: 0.6rem; }
+.assignment-label { width: 6.5rem; flex-shrink: 0; font-size: 0.82rem; color: var(--muted); font-family: monospace; }
+.drop-zone { flex: 1; min-height: 1.9rem; display: flex; align-items: center; padding: 0.2rem 0.4rem; border: 1.5px dashed var(--border); border-radius: 6px; background: #fff; transition: border-color 0.15s, background 0.15s; }
+.drop-zone.drag-over { border-color: var(--accent); background: #eff6ff; }
+.drop-zone.has-chip { border-style: solid; border-color: #bfdbfe; background: #f0f7ff; }
+.mappings-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
 
 /* ── Summaries ────────────────────────────────────────────────────── */
 #summary-form-details { margin-bottom: 1rem; }
@@ -253,10 +265,32 @@ label.inline-check input { flex: none; width: auto; }
 .summary-badge.on { background: #dcfce7; border-color: #86efac; color: var(--success); }
 .summary-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
 
+/* ── Relevance badges ─────────────────────────────────────────────── */
+.relevance-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0.2em 0.5em;
+  border-radius: 999px;
+  vertical-align: middle;
+  cursor: default;
+  letter-spacing: 0.02em;
+}
+.relevance-high { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+.relevance-med  { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+.relevance-low  { background: #f1f5f9; color: var(--muted); border: 1px solid var(--border); }
+
 /* ── Settings ─────────────────────────────────────────────────────── */
+.settings-section-heading { margin: 2rem 0 0.25rem; font-size: 1rem; }
+.settings-section-heading:first-of-type { margin-top: 0; }
+.settings-hint { color: var(--muted); font-size: 0.85rem; margin: 0 0 1rem; max-width: 36rem; }
 .settings-form { max-width: 28rem; }
 .settings-form label { display: flex; flex-direction: column; font-size: 0.85rem; gap: 0.25rem; margin-bottom: 0.75rem; }
-.settings-form label input { flex: none; }
+.settings-form label input,
+.settings-form label select,
+.settings-form label textarea { flex: none; }
+.settings-form #llm-settings { padding: 0.5rem 0 0.5rem 0.75rem; border-left: 3px solid var(--border); margin-bottom: 0.75rem; }
 
 /* ── Shared feedback ──────────────────────────────────────────────── */
 .error { color: var(--danger); margin: 0 0 0.75rem; font-size: 0.9rem; }
