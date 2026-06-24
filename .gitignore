@@ -1,0 +1,9 @@
+# Build artifacts
+/paper-inator
+/paper-inator-linux-amd64
+/paper-inator-linux-arm64
+
+# SQLite databases (and WAL/SHM sidecars)
+*.db
+*.db-wal
+*.db-shm
